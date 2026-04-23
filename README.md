@@ -4,6 +4,8 @@ Automated service that polls Mercado Libre for new Flex orders and registers
 them as visits in SimpliRoute, without human intervention. Idempotent,
 tolerant to restarts, alerted via Telegram on failures.
 
+**Version:** v1.0.0 · **Test suite:** 111 tests, all passing · **Stack:** Python 3.11 + FastAPI + PostgreSQL + Railway
+
 ## Requirements
 
 - Python 3.11+
@@ -158,6 +160,39 @@ default dedup window is 15 minutes (see `ALERT_DEDUP_WINDOW_MINUTES`).
 | `cron_watchdog` | critical | no successful cron_run in the watchdog window |
 | `refresh_token_aging` | warning | refresh token older than 5 months |
 | `cron_run_failed` | critical | `run_sync` raised an unhandled exception |
+
+## Acceptance criteria (client demo)
+
+The contract requires a live demo proving the service works end-to-end.
+The following checklist matches the contract's acceptance text.
+
+1. **Three real Flex orders** are created as visits in SimpliRoute.
+2. **Each visit's `reference`** equals the ML `order_id`.
+3. **Re-triggering the cron** (manually, within seconds) creates zero
+   new visits — every order shows `skipped_duplicate`.
+4. **Telegram alert** arrives when a SimpliRoute failure is forced.
+5. **Watchdog** alerts if the scheduler stops posting successful runs.
+
+Commands to run during the demo (adjust `$URL` and `$SECRET`):
+
+```bash
+# 1. Trigger a fresh run:
+curl -X POST $URL/internal/run -H "X-Internal-Secret: $SECRET" | jq
+
+# 2. Verify in SimpliRoute dashboard that new visits appeared,
+#    each with its reference == ml_order_id.
+
+# 3. Re-trigger — must be all-skipped:
+curl -X POST $URL/internal/run -H "X-Internal-Secret: $SECRET" | jq
+
+# 4. Inspect DB state:
+psql $DATABASE_URL -c \
+  "SELECT ml_order_id, status, simpliroute_visit_id
+   FROM processed_orders ORDER BY processed_at DESC LIMIT 10;"
+
+# 5. Force a failure: temporarily set SIMPLIROUTE_TOKEN=invalid
+#    in Railway → redeploy → re-run → confirm Telegram alert.
+```
 
 ## Troubleshooting
 
