@@ -98,7 +98,10 @@ class CronRun(Base, TimestampMixin):
     __tablename__ = "cron_runs"
     __table_args__ = (Index("ix_cron_runs_started_at", "started_at"),)
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    # SQLite only autoincrements INTEGER PKs, not BIGINT; use a variant.
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"), primary_key=True
+    )
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[CronRunStatus] = mapped_column(
