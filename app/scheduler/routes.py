@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.db import get_db
 from app.scheduler.job import run_sync
+from app.scheduler.watchdog import check_cron_health, check_token_health
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
@@ -35,4 +36,24 @@ def trigger_run(session: Session = Depends(get_db)) -> dict:
         "skipped": summary.skipped,
         "manual_review": summary.manual_review,
         "errors": summary.errors,
+    }
+
+
+@router.post("/watchdog", dependencies=[Depends(_require_secret)])
+def trigger_watchdog(session: Session = Depends(get_db)) -> dict:
+    result = check_cron_health(session)
+    return {
+        "healthy": result.healthy,
+        "minutes_since_last_success": result.minutes_since_last_success,
+        "alerted": result.alerted,
+    }
+
+
+@router.post("/token-health", dependencies=[Depends(_require_secret)])
+def trigger_token_health(session: Session = Depends(get_db)) -> dict:
+    result = check_token_health(session)
+    return {
+        "refreshed": result.refreshed,
+        "age_days": result.age_days,
+        "alerted": result.alerted,
     }

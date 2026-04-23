@@ -1,0 +1,12 @@
+[phases.setup]
+nixPkgs = ["python311", "gcc"]
+
+[phases.install]
+cmds = [
+  "python -m venv /opt/venv",
+  ". /opt/venv/bin/activate && pip install --upgrade pip",
+  ". /opt/venv/bin/activate && pip install -e '.[dev]'",
+]
+
+[start]
+cmd = "/opt/venv/bin/alembic upgrade head && /opt/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1"

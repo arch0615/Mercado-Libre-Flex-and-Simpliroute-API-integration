@@ -128,3 +128,16 @@ class GeocodingCache(Base, TimestampMixin):
     lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     backend: Mapped[str] = mapped_column(String(32), nullable=False)
+
+
+class AlertDedup(Base, TimestampMixin):
+    """Last-sent timestamps keyed by dedup_key; used to suppress duplicate alerts."""
+
+    __tablename__ = "alert_dedup"
+    __table_args__ = (UniqueConstraint("dedup_key", name="uq_alert_dedup_key"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    dedup_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    last_sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_level: Mapped[str | None] = mapped_column(String(16), nullable=True)

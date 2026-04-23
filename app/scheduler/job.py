@@ -18,9 +18,11 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from app.alerts import service as alerts
 from app.core.logging import logger
 from app.db.models import CronRun, CronRunStatus
 from app.ml.api import MLClient
+from app.ml.oauth import OAuthError
 from app.ml.orders import fetch_new_orders, get_cursor
 from app.scheduler.lock import LockNotAcquired, advisory_lock
 from app.scheduler.processor import Outcome, ProcessResult, process_order
@@ -67,11 +69,20 @@ def run_sync(
         session.commit()
         logger.info("cron_run_skipped_lock_held", cron_run_id=cron_run_id)
         return RunSummary(cron_run_id=cron_run_id, status=CronRunStatus.skipped)
+    except OAuthError as exc:
+        cron_run.status = CronRunStatus.failed
+        cron_run.finished_at = datetime.now(timezone.utc)
+        cron_run.notes = str(exc)[:500]
+        session.commit()
+        alerts.alert_ml_refresh_failed(session, str(exc))
+        logger.exception("cron_run_failed_oauth", cron_run_id=cron_run_id)
+        raise
     except Exception as exc:
         cron_run.status = CronRunStatus.failed
         cron_run.finished_at = datetime.now(timezone.utc)
         cron_run.notes = str(exc)[:500]
         session.commit()
+        alerts.alert_cron_failed(session, str(exc))
         logger.exception("cron_run_failed", cron_run_id=cron_run_id)
         raise
 

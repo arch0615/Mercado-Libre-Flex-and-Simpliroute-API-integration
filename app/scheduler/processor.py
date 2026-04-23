@@ -24,6 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.alerts import service as alerts
 from app.core.config import get_settings
 from app.core.logging import logger
 from app.core.transform import ManualReview, VisitPayload, map_order_to_visit
@@ -75,6 +76,7 @@ def process_order(
     mapped = map_order_to_visit(fetched)
     if isinstance(mapped, ManualReview):
         _record_manual_review(session, ml_order_id, mapped.reason, mapped.detail, fetched.order)
+        alerts.alert_manual_review(session, ml_order_id, mapped.reason)
         return ProcessResult(
             outcome=Outcome.manual_review,
             ml_order_id=ml_order_id,
@@ -88,6 +90,7 @@ def process_order(
         reason = _resolve_coordinates(session, visit, geocoder=geocoder)
         if reason is not None:
             _record_manual_review(session, ml_order_id, reason, visit.address, fetched.order)
+            alerts.alert_manual_review(session, ml_order_id, reason)
             return ProcessResult(
                 outcome=Outcome.manual_review,
                 ml_order_id=ml_order_id,
@@ -130,6 +133,7 @@ def process_order(
         _record_manual_review(
             session, ml_order_id, REASON_SIMPLIROUTE_PERMANENT, str(e)[:1000], fetched.order
         )
+        alerts.alert_simpliroute_permanent(session, ml_order_id, str(e))
         logger.error("simpliroute_permanent_failure", ml_order_id=ml_order_id, error=str(e))
         return ProcessResult(
             outcome=Outcome.permanent_failed,
@@ -139,6 +143,7 @@ def process_order(
         )
     except TransientSimpliRouteError as e:
         _mark_failed(session, ml_order_id, str(e)[:1000])
+        alerts.alert_simpliroute_transient_exhausted(session, ml_order_id, str(e))
         logger.warning("simpliroute_transient_exhausted", ml_order_id=ml_order_id, error=str(e))
         return ProcessResult(
             outcome=Outcome.transient_failed, ml_order_id=ml_order_id, detail=str(e)
