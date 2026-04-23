@@ -1,0 +1,51 @@
+# ---- Secrets (NEVER commit) ----
+.env
+.env.*
+!.env.example
+info.txt
+*.pem
+*.key
+credentials.json
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.venv/
+venv/
+env/
+
+# ---- IDEs ----
+.idea/
+.vscode/
+.claude/
+*.swp
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+
+# ---- Docker ----
+docker-volumes/
+postgres-data/
+
+# ---- Logs ----
+*.log
+logs/
+
+# ---- Planning docs (kept local, not in client repo) ----
+WORK_PLAN.md
+TESTING_GUIDE.md
+Job Description.txt
