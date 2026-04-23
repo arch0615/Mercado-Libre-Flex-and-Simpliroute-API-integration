@@ -8,11 +8,13 @@ from app.core.db import get_db
 from app.core.logging import configure_logging
 from app.db.models import CronRun, CronRunStatus
 from app.ml.routes import router as oauth_router
+from app.scheduler.routes import router as scheduler_router
 
 configure_logging()
 
 app = FastAPI(title="Mercado Libre Flex -> SimpliRoute")
 app.include_router(oauth_router)
+app.include_router(scheduler_router)
 
 
 @app.get("/health")

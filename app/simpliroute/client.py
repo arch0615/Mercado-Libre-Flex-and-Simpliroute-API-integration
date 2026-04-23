@@ -99,6 +99,35 @@ class SimpliRouteClient:
         _raise_for_status(response, url)
         return response.json()
 
+    def find_visit_by_reference(self, reference: str) -> dict | None:
+        """Crash-safe retry guard: look up a visit we may have already created.
+
+        If the process died between POST /visits and the DB completion UPDATE,
+        the next run would otherwise create a duplicate. Callers use this in
+        the retry path to recover the existing visit instead of re-creating.
+
+        Returns the first matching visit dict or None.
+        """
+        url = self._url("/v1/routes/visits/")
+        try:
+            response = self._http.get(
+                url, params={"reference": reference}, headers=self._headers()
+            )
+        except (httpx.TimeoutException, httpx.TransportError) as e:
+            raise TransientSimpliRouteError(None, str(e), url) from e
+        if response.status_code == 404:
+            return None
+        _raise_for_status(response, url)
+        data = response.json()
+        # SimpliRoute can return a list or a paginated {results: [...]}.
+        results = data.get("results") if isinstance(data, dict) else data
+        if not results:
+            return None
+        for visit in results:
+            if str(visit.get("reference")) == str(reference):
+                return visit
+        return None
+
     # -- Internal: retry wrapper bound to the instance via a closure so the
     # tenacity decorator's config uses our settings at call time.
     def _retrying_post(self, path: str, body: dict) -> dict:
