@@ -86,16 +86,6 @@ def index(request: Request, session: Session = Depends(get_db)) -> HTMLResponse:
                 {"tag": "Trace",   "title": "Visit reference",          "body": "Every SimpliRoute visit carries the ML order id as its external reference — for audit, and to enable the recovery path above."},
                 {"tag": "Lock",    "title": "Postgres advisory lock",   "body": "pg_try_advisory_lock at the top of run_sync prevents two workers from racing on the same orders."},
             ],
-            "stack": [
-                {"name": "Python 3.11",  "role": "runtime"},
-                {"name": "FastAPI",      "role": "web"},
-                {"name": "PostgreSQL",   "role": "store"},
-                {"name": "SQLAlchemy 2", "role": "orm"},
-                {"name": "Alembic",      "role": "migrations"},
-                {"name": "tenacity",     "role": "retries"},
-                {"name": "loguru",       "role": "logging"},
-                {"name": "Railway",      "role": "deploy"},
-            ],
         },
     )
 
