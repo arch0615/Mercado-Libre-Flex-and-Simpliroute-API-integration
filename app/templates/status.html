@@ -1,119 +1,149 @@
 {% extends "base.html" %}
-{% block title %}Status · Mercado Libre Flex → SimpliRoute{% endblock %}
+{% block title %}Status · Flex → SimpliRoute{% endblock %}
 {% block content %}
 
-<section class="mb-10">
-  <h1 class="text-2xl font-semibold tracking-tight text-slate-900 mb-1">Service status</h1>
-  <p class="text-slate-600 text-sm">Read-only operator view. Auto-refreshes every 30 seconds.</p>
+<section class="max-w-6xl mx-auto px-6 pt-12 pb-8">
+  <div class="flex items-end justify-between flex-wrap gap-4 mb-1">
+    <div>
+      <div class="text-[11px] uppercase tracking-wider text-emerald-400 font-semibold mb-2">Operations</div>
+      <h1 class="text-3xl sm:text-4xl font-bold tracking-tight text-ink-100">Service status</h1>
+    </div>
+    <div class="text-xs text-ink-500 font-mono">auto-refresh · 30s</div>
+  </div>
+  <p class="text-ink-400 text-sm max-w-2xl">Read-only operator view. No actions, no auth — just visibility into the cron, tokens, and recent alerts.</p>
 </section>
 
-<section class="grid sm:grid-cols-4 gap-4 mb-10">
-  <div class="rounded-xl border border-slate-200 bg-white p-5">
-    <div class="text-xs uppercase tracking-wider text-slate-500 mb-2">Database</div>
-    <div class="flex items-center gap-2">
-      <span class="dot {{ 'dot-ok' if db_ok else 'dot-err' }}"></span>
-      <span class="text-sm font-semibold text-slate-900">{{ 'Connected' if db_ok else 'Down' }}</span>
+{# ---- 4-up indicator strip ---- #}
+<section class="max-w-6xl mx-auto px-6 mb-10">
+  <div class="card rounded-2xl divide-y sm:divide-y-0 sm:divide-x divide-white/[0.06] grid sm:grid-cols-4">
+    <div class="p-5">
+      <div class="text-[11px] uppercase tracking-wider text-ink-500 mb-2">Database</div>
+      <div class="flex items-center gap-2.5">
+        <span class="dot {{ 'dot-ok' if db_ok else 'dot-err' }}"></span>
+        <span class="text-base font-semibold text-ink-100">{{ 'Connected' if db_ok else 'Down' }}</span>
+      </div>
     </div>
-  </div>
-  <div class="rounded-xl border border-slate-200 bg-white p-5">
-    <div class="text-xs uppercase tracking-wider text-slate-500 mb-2">Cron</div>
-    <div class="flex items-center gap-2">
-      <span class="dot {{ cron_dot_class }}"></span>
-      <span class="text-sm font-semibold text-slate-900">{{ cron_label }}</span>
+    <div class="p-5">
+      <div class="text-[11px] uppercase tracking-wider text-ink-500 mb-2">Cron</div>
+      <div class="flex items-center gap-2.5">
+        <span class="dot {{ cron_dot_class }}"></span>
+        <span class="text-base font-semibold text-ink-100">{{ cron_label }}</span>
+      </div>
     </div>
-  </div>
-  <div class="rounded-xl border border-slate-200 bg-white p-5">
-    <div class="text-xs uppercase tracking-wider text-slate-500 mb-2">ML token</div>
-    <div class="flex items-center gap-2">
-      <span class="dot {{ token_dot_class }}"></span>
-      <span class="text-sm font-semibold text-slate-900">{{ token_label }}</span>
+    <div class="p-5">
+      <div class="text-[11px] uppercase tracking-wider text-ink-500 mb-2">ML token</div>
+      <div class="flex items-center gap-2.5">
+        <span class="dot {{ token_dot_class }}"></span>
+        <span class="text-base font-semibold text-ink-100">{{ token_label }}</span>
+      </div>
     </div>
-  </div>
-  <div class="rounded-xl border border-slate-200 bg-white p-5">
-    <div class="text-xs uppercase tracking-wider text-slate-500 mb-2">Manual review</div>
-    <div class="flex items-center gap-2">
-      <span class="dot {{ 'dot-warn' if manual_review_open > 0 else 'dot-ok' }}"></span>
-      <span class="text-sm font-semibold text-slate-900">{{ manual_review_open }} open</span>
+    <div class="p-5">
+      <div class="text-[11px] uppercase tracking-wider text-ink-500 mb-2">Manual review</div>
+      <div class="flex items-center gap-2.5">
+        <span class="dot {{ 'dot-warn' if manual_review_open > 0 else 'dot-ok' }}"></span>
+        <span class="text-base font-semibold text-ink-100"><span class="stat-num">{{ manual_review_open }}</span> open</span>
+      </div>
     </div>
   </div>
 </section>
 
-<section class="mb-10">
-  <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4">Recent cron runs</h2>
-  <div class="rounded-xl border border-slate-200 bg-white overflow-hidden">
+{# ---- Cron runs table ---- #}
+<section class="max-w-6xl mx-auto px-6 mb-10">
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="text-sm font-semibold uppercase tracking-wider text-ink-400">Recent cron runs</h2>
+    <span class="text-[11px] font-mono text-ink-600">last 20</span>
+  </div>
+  <div class="card rounded-xl overflow-hidden">
     {% if cron_runs %}
     <table class="w-full text-sm">
-      <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+      <thead class="bg-white/[0.02] text-[11px] uppercase tracking-wider text-ink-500">
         <tr>
-          <th class="text-left px-4 py-2.5 font-medium">Started</th>
-          <th class="text-left px-4 py-2.5 font-medium">Status</th>
-          <th class="text-right px-4 py-2.5 font-medium">Processed</th>
-          <th class="text-right px-4 py-2.5 font-medium">Skipped</th>
-          <th class="text-right px-4 py-2.5 font-medium">Errors</th>
-          <th class="text-left px-4 py-2.5 font-medium">Notes</th>
+          <th class="text-left px-4 py-3 font-medium">Started</th>
+          <th class="text-left px-4 py-3 font-medium">Status</th>
+          <th class="text-right px-4 py-3 font-medium">Processed</th>
+          <th class="text-right px-4 py-3 font-medium">Skipped</th>
+          <th class="text-right px-4 py-3 font-medium">Errors</th>
+          <th class="text-left px-4 py-3 font-medium">Notes</th>
         </tr>
       </thead>
-      <tbody class="divide-y divide-slate-100">
+      <tbody class="divide-y divide-white/[0.05]">
         {% for run in cron_runs %}
-        <tr>
-          <td class="px-4 py-2.5 font-mono text-xs text-slate-700">{{ run.started_at }}</td>
+        <tr class="hover:bg-white/[0.02] transition">
+          <td class="px-4 py-2.5 font-mono text-xs text-ink-300">{{ run.started_at }}</td>
           <td class="px-4 py-2.5">
-            <span class="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full
-              {% if run.status == 'success' %}bg-emerald-50 text-emerald-700{% elif run.status == 'failed' %}bg-rose-50 text-rose-700{% elif run.status == 'skipped' %}bg-slate-100 text-slate-700{% else %}bg-amber-50 text-amber-700{% endif %}">
-              {{ run.status }}
-            </span>
+            <span class="badge
+              {% if run.status == 'success' %}badge-emerald
+              {% elif run.status == 'failed' %}badge-rose
+              {% elif run.status == 'skipped' %}badge-slate
+              {% else %}badge-amber{% endif %}">{{ run.status }}</span>
           </td>
-          <td class="px-4 py-2.5 text-right font-mono tabular-nums">{{ run.processed_count }}</td>
-          <td class="px-4 py-2.5 text-right font-mono tabular-nums">{{ run.skipped_count }}</td>
-          <td class="px-4 py-2.5 text-right font-mono tabular-nums {% if run.errors_count > 0 %}text-rose-600 font-semibold{% endif %}">{{ run.errors_count }}</td>
-          <td class="px-4 py-2.5 text-xs text-slate-500 truncate max-w-md">{{ run.notes or '' }}</td>
+          <td class="px-4 py-2.5 text-right font-mono tabular-nums text-ink-200">{{ run.processed_count }}</td>
+          <td class="px-4 py-2.5 text-right font-mono tabular-nums text-ink-400">{{ run.skipped_count }}</td>
+          <td class="px-4 py-2.5 text-right font-mono tabular-nums {% if run.errors_count > 0 %}text-rose-300 font-semibold{% else %}text-ink-500{% endif %}">{{ run.errors_count }}</td>
+          <td class="px-4 py-2.5 text-xs text-ink-500 truncate max-w-md">{{ run.notes or '—' }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
     {% else %}
-    <div class="px-4 py-8 text-center text-sm text-slate-500">No cron runs yet.</div>
+    <div class="px-4 py-12 text-center">
+      <div class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-ink-900 ring-1 ring-white/10 text-ink-500 mb-3">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      </div>
+      <div class="text-sm text-ink-300 font-medium">No cron runs yet</div>
+      <div class="text-xs text-ink-500 mt-1">The first tick will record a row here.</div>
+    </div>
     {% endif %}
   </div>
 </section>
 
-<section class="mb-10">
-  <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4">Last alerts</h2>
-  <div class="rounded-xl border border-slate-200 bg-white overflow-hidden">
+{# ---- Alerts table ---- #}
+<section class="max-w-6xl mx-auto px-6 mb-10">
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="text-sm font-semibold uppercase tracking-wider text-ink-400">Last alerts</h2>
+    <span class="text-[11px] font-mono text-ink-600">dedup window 15 min</span>
+  </div>
+  <div class="card rounded-xl overflow-hidden">
     {% if alerts %}
     <table class="w-full text-sm">
-      <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+      <thead class="bg-white/[0.02] text-[11px] uppercase tracking-wider text-ink-500">
         <tr>
-          <th class="text-left px-4 py-2.5 font-medium">Last sent</th>
-          <th class="text-left px-4 py-2.5 font-medium">Level</th>
-          <th class="text-left px-4 py-2.5 font-medium">Dedup key</th>
-          <th class="text-left px-4 py-2.5 font-medium">Title</th>
+          <th class="text-left px-4 py-3 font-medium">Last sent</th>
+          <th class="text-left px-4 py-3 font-medium">Level</th>
+          <th class="text-left px-4 py-3 font-medium">Dedup key</th>
+          <th class="text-left px-4 py-3 font-medium">Title</th>
         </tr>
       </thead>
-      <tbody class="divide-y divide-slate-100">
+      <tbody class="divide-y divide-white/[0.05]">
         {% for a in alerts %}
-        <tr>
-          <td class="px-4 py-2.5 font-mono text-xs text-slate-700">{{ a.last_sent_at }}</td>
+        <tr class="hover:bg-white/[0.02] transition">
+          <td class="px-4 py-2.5 font-mono text-xs text-ink-300">{{ a.last_sent_at }}</td>
           <td class="px-4 py-2.5">
-            <span class="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full
-              {% if a.last_level == 'critical' %}bg-rose-50 text-rose-700{% elif a.last_level == 'error' %}bg-orange-50 text-orange-700{% elif a.last_level == 'warning' %}bg-amber-50 text-amber-700{% else %}bg-slate-100 text-slate-700{% endif %}">
-              {{ a.last_level or 'info' }}
-            </span>
+            <span class="badge
+              {% if a.last_level == 'critical' %}badge-rose
+              {% elif a.last_level == 'error' %}badge-amber
+              {% elif a.last_level == 'warning' %}badge-amber
+              {% else %}badge-slate{% endif %}">{{ a.last_level or 'info' }}</span>
           </td>
-          <td class="px-4 py-2.5 font-mono text-xs text-slate-700">{{ a.dedup_key }}</td>
-          <td class="px-4 py-2.5 text-slate-700">{{ a.last_title or '' }}</td>
+          <td class="px-4 py-2.5 font-mono text-xs text-ink-400">{{ a.dedup_key }}</td>
+          <td class="px-4 py-2.5 text-ink-200">{{ a.last_title or '' }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
     {% else %}
-    <div class="px-4 py-8 text-center text-sm text-slate-500">No alerts fired yet.</div>
+    <div class="px-4 py-12 text-center">
+      <div class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-emerald-400/10 ring-1 ring-emerald-400/25 text-emerald-300 mb-3">
+        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>
+      </div>
+      <div class="text-sm text-ink-300 font-medium">All quiet</div>
+      <div class="text-xs text-ink-500 mt-1">No alerts have fired.</div>
+    </div>
     {% endif %}
   </div>
 </section>
 
 <script>
-  // Refresh once every 30s. Read-only; safe to refresh.
   setTimeout(() => location.reload(), 30000);
 </script>
 

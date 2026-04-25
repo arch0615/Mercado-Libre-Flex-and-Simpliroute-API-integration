@@ -53,6 +53,12 @@ def index(request: Request, session: Session = Depends(get_db)) -> HTMLResponse:
     ).scalar() or 0
 
     healthy = last_run is not None
+    icon_clock = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>'
+    icon_map = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>'
+    icon_pin = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>'
+    icon_lock = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>'
+    icon_bell = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>'
+
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -67,33 +73,28 @@ def index(request: Request, session: Session = Depends(get_db)) -> HTMLResponse:
             "processed_today": processed_today,
             "manual_review_open": manual_review_open,
             "pipeline": [
-                {
-                    "title": "Poll Mercado Libre",
-                    "body": "Every cron tick, fetch orders updated since the last successful run; filter to Flex via /shipments.logistic_type.",
-                },
-                {
-                    "title": "Map + normalize",
-                    "body": "Translate ML payload to a SimpliRoute visit; normalize AR addresses (abbreviations, accents, floor/depto).",
-                },
-                {
-                    "title": "Geocode (cached)",
-                    "body": f"Resolve coordinates via {settings.geocoder_backend.title()}; cache by SHA-256 of the normalized address.",
-                },
-                {
-                    "title": "Two-stage write",
-                    "body": "Claim a 'pending' row + COMMIT before the SimpliRoute POST; mark 'completed' only after the visit is created.",
-                },
-                {
-                    "title": "Alert on failure",
-                    "body": "Critical paths (OAuth refresh, SimpliRoute 5xx, watchdog) page Telegram with stable dedup keys.",
-                },
+                {"icon": icon_clock, "title": "Poll Mercado Libre", "body": "Every cron tick, fetch orders updated since the last successful run; filter to Flex via shipment.logistic_type."},
+                {"icon": icon_map,   "title": "Map + normalize",    "body": "Translate ML payload to a SimpliRoute visit; normalize AR addresses (abbreviations, accents, floor / depto)."},
+                {"icon": icon_pin,   "title": "Geocode (cached)",   "body": f"Resolve coordinates via {settings.geocoder_backend.title()}; cache by SHA-256 of the normalized address."},
+                {"icon": icon_lock,  "title": "Two-stage write",    "body": "Claim a 'pending' row + COMMIT before SimpliRoute; mark 'completed' only after the visit is created."},
+                {"icon": icon_bell,  "title": "Alert on failure",   "body": "OAuth refresh, SimpliRoute 5xx, watchdog — all page Telegram with stable dedup keys."},
             ],
             "defenses": [
-                {"title": "UNIQUE(ml_order_id)", "body": "Database-level guarantee that one ML order maps to at most one row."},
-                {"title": "Two-stage write", "body": "Claim before call, complete after success — crashes leave a row to retry, not a duplicate."},
-                {"title": "Reference-based recovery", "body": "On retry, find_visit_by_reference looks up an existing SimpliRoute visit by ml_order_id and rebinds it instead of creating a new one."},
-                {"title": "Visit reference", "body": "Every SimpliRoute visit carries the ML order id as its external reference, both for audit and recovery."},
-                {"title": "Postgres advisory lock", "body": "pg_try_advisory_lock at the top of run_sync prevents two workers from racing on the same orders."},
+                {"tag": "DB",      "title": "UNIQUE(ml_order_id)",      "body": "Database-level guarantee that one ML order maps to at most one row in processed_orders."},
+                {"tag": "Logic",   "title": "Two-stage write",          "body": "Claim before call, complete after success — crashes leave a row to retry, not a duplicate visit."},
+                {"tag": "Recover", "title": "Reference-based recovery", "body": "On retry, find_visit_by_reference looks up an existing SimpliRoute visit by ml_order_id and rebinds it instead of creating a new one."},
+                {"tag": "Trace",   "title": "Visit reference",          "body": "Every SimpliRoute visit carries the ML order id as its external reference — for audit, and to enable the recovery path above."},
+                {"tag": "Lock",    "title": "Postgres advisory lock",   "body": "pg_try_advisory_lock at the top of run_sync prevents two workers from racing on the same orders."},
+            ],
+            "stack": [
+                {"name": "Python 3.11",  "role": "runtime"},
+                {"name": "FastAPI",      "role": "web"},
+                {"name": "PostgreSQL",   "role": "store"},
+                {"name": "SQLAlchemy 2", "role": "orm"},
+                {"name": "Alembic",      "role": "migrations"},
+                {"name": "tenacity",     "role": "retries"},
+                {"name": "loguru",       "role": "logging"},
+                {"name": "Railway",      "role": "deploy"},
             ],
         },
     )

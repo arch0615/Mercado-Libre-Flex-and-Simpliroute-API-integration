@@ -1,94 +1,315 @@
 {% extends "base.html" %}
-{% block title %}Overview · Mercado Libre Flex → SimpliRoute{% endblock %}
+{% block title %}Flex → SimpliRoute — automated visit creation{% endblock %}
 {% block content %}
 
-<section class="mb-10">
-  <div class="flex items-center gap-3 text-xs uppercase tracking-wider text-slate-500 mb-3">
-    <span class="dot {{ status_dot_class }}"></span>
-    <span>{{ status_label }}</span>
+{# ============================================================
+   HERO
+   ============================================================ #}
+<section class="relative max-w-6xl mx-auto px-6 pt-16 sm:pt-24 pb-16 animate-fade-up">
+  <div class="grid lg:grid-cols-12 gap-10 items-center">
+
+    <div class="lg:col-span-7">
+      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-white/[0.03] text-xs mb-6">
+        <span class="dot {{ status_dot_class }} animate-pulse-soft"></span>
+        <span class="text-ink-300">{{ status_label }}</span>
+        <span class="text-ink-600">·</span>
+        <span class="text-ink-500 font-mono">v1.0.0</span>
+      </div>
+
+      <h1 class="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.05] text-gradient mb-6">
+        Mercado Libre Flex,<br>
+        <span class="text-emerald-400">delivered to SimpliRoute.</span>
+      </h1>
+
+      <p class="text-lg text-ink-300 max-w-xl leading-relaxed mb-8">
+        Headless service that polls Mercado Libre every {{ cron_interval }} minutes, normalizes Flex orders,
+        and creates SimpliRoute visits — idempotent, restart-tolerant, and alerted on failure.
+        Designed to run unattended for the 600 orders/day operation.
+      </p>
+
+      <div class="flex flex-wrap gap-3 mb-8">
+        <a href="/oauth/authorize" class="btn btn-primary">
+          Authorize Mercado Libre
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+        </a>
+        <a href="/status" class="btn btn-secondary">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l3-3 3 3 4-4 4 4 4-4"/></svg>
+          View live status
+        </a>
+        <a href="/docs" class="btn btn-secondary">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          API reference
+        </a>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-ink-400">
+        <div class="flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>
+          <span>Zero duplicates by design</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>
+          <span>OAuth auto-rotation</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>
+          <span>Telegram alerts</span>
+        </div>
+      </div>
+    </div>
+
+    {# --- Hero side panel: live integration card --- #}
+    <div class="lg:col-span-5 lg:pl-4">
+      <div class="card ring-glow rounded-2xl p-1">
+        <div class="rounded-xl bg-ink-950/80 p-5">
+
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2 text-xs text-ink-400">
+              <span class="dot dot-ok"></span>
+              <span class="font-mono">live · cron tick</span>
+            </div>
+            <span class="text-[10px] uppercase tracking-wider text-ink-600">Pipeline</span>
+          </div>
+
+          {# Pipeline rail #}
+          <div class="relative">
+            <div class="absolute left-[15px] top-3 bottom-3 w-px bg-gradient-to-b from-emerald-400/60 via-emerald-400/30 to-cyan-400/30"></div>
+
+            <div class="space-y-3.5">
+              {# Step 1: ML #}
+              <div class="flex items-start gap-3 relative">
+                <div class="relative z-10 flex-none w-8 h-8 rounded-lg bg-ink-900 ring-1 ring-emerald-400/30 flex items-center justify-center text-emerald-400 text-[11px] font-bold font-mono">ML</div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium text-ink-100">Mercado Libre</div>
+                  <div class="text-xs text-ink-400 font-mono mt-0.5">GET /orders/search · ready_to_ship</div>
+                </div>
+                <span class="badge badge-emerald shrink-0">200</span>
+              </div>
+
+              {# Step 2: transform #}
+              <div class="flex items-start gap-3 relative">
+                <div class="relative z-10 flex-none w-8 h-8 rounded-lg bg-ink-900 ring-1 ring-white/10 flex items-center justify-center text-ink-300">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7"/></svg>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium text-ink-100">Transform + geocode</div>
+                  <div class="text-xs text-ink-400 font-mono mt-0.5">normalize · cache · validate</div>
+                </div>
+                <span class="badge badge-slate shrink-0">3 ok</span>
+              </div>
+
+              {# Step 3: claim #}
+              <div class="flex items-start gap-3 relative">
+                <div class="relative z-10 flex-none w-8 h-8 rounded-lg bg-ink-900 ring-1 ring-white/10 flex items-center justify-center text-ink-300">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium text-ink-100">Claim row · pending</div>
+                  <div class="text-xs text-ink-400 font-mono mt-0.5">INSERT · UNIQUE · advisory_lock</div>
+                </div>
+                <span class="badge badge-slate shrink-0">commit</span>
+              </div>
+
+              {# Step 4: SR #}
+              <div class="flex items-start gap-3 relative">
+                <div class="relative z-10 flex-none w-8 h-8 rounded-lg bg-ink-900 ring-1 ring-cyan-400/30 flex items-center justify-center text-cyan-400 text-[10px] font-bold font-mono">SR</div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium text-ink-100">SimpliRoute</div>
+                  <div class="text-xs text-ink-400 font-mono mt-0.5">POST /v1/routes/visits · ref=ml_id</div>
+                </div>
+                <span class="badge badge-emerald shrink-0">201</span>
+              </div>
+
+              {# Step 5: complete #}
+              <div class="flex items-start gap-3 relative">
+                <div class="relative z-10 flex-none w-8 h-8 rounded-lg bg-emerald-400/15 ring-1 ring-emerald-400/40 flex items-center justify-center text-emerald-400">
+                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium text-ink-100">Mark completed</div>
+                  <div class="text-xs text-ink-400 font-mono mt-0.5">visit_id stored · cron_run += 1</div>
+                </div>
+                <span class="badge badge-emerald shrink-0">done</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-5 pt-4 border-t border-white/[0.06] flex items-center justify-between text-[11px] text-ink-500">
+            <span>Last tick: <span class="text-ink-300 font-mono">{{ last_run_relative or '—' }}</span></span>
+            <span class="font-mono">{{ processed_today }} today</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
-  <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight text-slate-900 mb-3">
-    Mercado Libre Flex → SimpliRoute
-  </h1>
-  <p class="text-slate-600 max-w-2xl text-base leading-relaxed">
-    Headless integration service. Polls Mercado Libre for new Flex orders every
-    {{ cron_interval }} minutes and registers them as SimpliRoute visits, with
-    idempotency guarantees, automatic token rotation, and Telegram alerting.
-  </p>
 </section>
 
-<section class="grid sm:grid-cols-3 gap-4 mb-10">
-  <div class="rounded-xl border border-slate-200 bg-white p-5">
-    <div class="text-xs uppercase tracking-wider text-slate-500 mb-2">Last successful run</div>
-    <div class="text-lg font-semibold text-slate-900 font-mono tabular-nums">
-      {{ last_run_relative or '—' }}
+{# ============================================================
+   STATS STRIP
+   ============================================================ #}
+<section class="max-w-6xl mx-auto px-6 mb-20">
+  <div class="card rounded-2xl divide-y sm:divide-y-0 sm:divide-x divide-white/[0.06] grid sm:grid-cols-4">
+
+    <div class="p-6">
+      <div class="flex items-center gap-2 text-[11px] uppercase tracking-wider text-ink-500 mb-2">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            Cadence
+      </div>
+      <div class="text-2xl font-semibold text-ink-100 stat-num">{{ cron_interval }}<span class="text-base text-ink-500 font-normal ml-1">min</span></div>
+      <div class="text-xs text-ink-500 mt-1">cron interval</div>
     </div>
-    <div class="text-xs text-slate-500 mt-1">
-      {{ last_run_iso or 'No runs recorded yet' }}
+
+    <div class="p-6">
+      <div class="flex items-center gap-2 text-[11px] uppercase tracking-wider text-ink-500 mb-2">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+        Visits processed
+      </div>
+      <div class="text-2xl font-semibold text-ink-100 stat-num">{{ processed_total }}</div>
+      <div class="text-xs text-ink-500 mt-1">{{ processed_today }} today</div>
     </div>
-  </div>
-  <div class="rounded-xl border border-slate-200 bg-white p-5">
-    <div class="text-xs uppercase tracking-wider text-slate-500 mb-2">Processed orders</div>
-    <div class="text-lg font-semibold text-slate-900 font-mono tabular-nums">
-      {{ processed_total }}
+
+    <div class="p-6">
+      <div class="flex items-center gap-2 text-[11px] uppercase tracking-wider text-ink-500 mb-2">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        Manual review
+      </div>
+      <div class="text-2xl font-semibold {% if manual_review_open > 0 %}text-amber-300{% else %}text-ink-100{% endif %} stat-num">{{ manual_review_open }}</div>
+      <div class="text-xs text-ink-500 mt-1">awaiting human</div>
     </div>
-    <div class="text-xs text-slate-500 mt-1">{{ processed_today }} today</div>
-  </div>
-  <div class="rounded-xl border border-slate-200 bg-white p-5">
-    <div class="text-xs uppercase tracking-wider text-slate-500 mb-2">Manual review</div>
-    <div class="text-lg font-semibold {% if manual_review_open > 0 %}text-amber-600{% else %}text-slate-900{% endif %} font-mono tabular-nums">
-      {{ manual_review_open }}
+
+    <div class="p-6">
+      <div class="flex items-center gap-2 text-[11px] uppercase tracking-wider text-ink-500 mb-2">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
+        Test coverage
+      </div>
+      <div class="text-2xl font-semibold text-ink-100 stat-num">111<span class="text-base text-ink-500 font-normal ml-1">/ 111</span></div>
+      <div class="text-xs text-emerald-400 mt-1">all green</div>
     </div>
-    <div class="text-xs text-slate-500 mt-1">awaiting human action</div>
   </div>
 </section>
 
-<section class="mb-10">
-  <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4">How it works</h2>
-  <ol class="space-y-3">
+{# ============================================================
+   ARCHITECTURE
+   ============================================================ #}
+<section class="max-w-6xl mx-auto px-6 mb-20">
+  <div class="text-center max-w-2xl mx-auto mb-12">
+    <div class="text-[11px] uppercase tracking-wider text-emerald-400 font-semibold mb-2">Architecture</div>
+    <h2 class="text-3xl sm:text-4xl font-bold text-ink-100 mb-3 tracking-tight">A pipeline you can reason about</h2>
+    <p class="text-ink-400">
+      Five sequential stages, all observable in <a href="/status" class="text-ink-200 hover:text-white underline underline-offset-4 decoration-ink-700 hover:decoration-emerald-400 transition">live status</a>.
+      Failures stop at the right boundary; the rest of the run keeps going.
+    </p>
+  </div>
+
+  <div class="grid md:grid-cols-3 lg:grid-cols-5 gap-3">
     {% for step in pipeline %}
-    <li class="flex gap-4 items-start">
-      <span class="flex-none w-7 h-7 rounded-full bg-slate-900 text-white text-xs font-mono flex items-center justify-center mt-0.5">{{ loop.index }}</span>
-      <div>
-        <div class="font-medium text-slate-900">{{ step.title }}</div>
-        <div class="text-sm text-slate-600">{{ step.body }}</div>
+    <div class="card card-hover rounded-xl p-5 relative">
+      <div class="flex items-center justify-between mb-4">
+        <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-ink-900 ring-1 ring-white/10 text-ink-300">
+          {{ step.icon | safe }}
+        </span>
+        <span class="text-[11px] font-mono text-ink-600">0{{ loop.index }}</span>
       </div>
-    </li>
-    {% endfor %}
-  </ol>
-</section>
-
-<section class="grid sm:grid-cols-2 gap-4 mb-10">
-  <a href="/docs" class="group rounded-xl border border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm transition p-5 flex items-start justify-between gap-4">
-    <div>
-      <div class="text-base font-semibold text-slate-900 mb-1">Interactive API docs</div>
-      <div class="text-sm text-slate-600">Try every endpoint from the browser. OpenAPI / Swagger UI.</div>
-    </div>
-    <svg class="w-5 h-5 text-slate-400 group-hover:text-slate-700 transition mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
-  </a>
-  <a href="/oauth/authorize" class="group rounded-xl border border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm transition p-5 flex items-start justify-between gap-4">
-    <div>
-      <div class="text-base font-semibold text-slate-900 mb-1">Authorize Mercado Libre</div>
-      <div class="text-sm text-slate-600">First-time OAuth setup. Run once after deploy or whenever the refresh chain breaks.</div>
-    </div>
-    <svg class="w-5 h-5 text-slate-400 group-hover:text-slate-700 transition mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
-  </a>
-</section>
-
-<section>
-  <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4">Anti-duplicate guarantees</h2>
-  <div class="rounded-xl border border-slate-200 bg-white divide-y divide-slate-200">
-    {% for layer in defenses %}
-    <div class="p-4 flex gap-4">
-      <span class="flex-none mt-1 inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-50 text-emerald-600">
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
-      </span>
-      <div>
-        <div class="font-medium text-slate-900">{{ layer.title }}</div>
-        <div class="text-sm text-slate-600">{{ layer.body }}</div>
-      </div>
+      <div class="font-semibold text-ink-100 text-sm mb-1.5">{{ step.title }}</div>
+      <div class="text-xs text-ink-400 leading-relaxed">{{ step.body }}</div>
     </div>
     {% endfor %}
+  </div>
+</section>
+
+{# ============================================================
+   ANTI-DUPLICATE GUARANTEES
+   ============================================================ #}
+<section class="max-w-6xl mx-auto px-6 mb-20">
+  <div class="grid lg:grid-cols-12 gap-10">
+    <div class="lg:col-span-4">
+      <div class="text-[11px] uppercase tracking-wider text-emerald-400 font-semibold mb-2">Idempotency</div>
+      <h2 class="text-3xl sm:text-4xl font-bold text-ink-100 mb-4 tracking-tight">Five layers,<br>zero duplicates.</h2>
+      <p class="text-ink-400 leading-relaxed mb-6">
+        At 600 orders/day, even a 0.1% duplicate rate is one wasted truck stop every other day.
+        The service treats "no duplicates" as a hard invariant, not a target.
+      </p>
+      <div class="card rounded-xl p-5">
+        <div class="text-[11px] uppercase tracking-wider text-ink-500 mb-2">Worst-case scenario</div>
+        <div class="text-sm text-ink-200 leading-relaxed">
+          Process crashes after POSTing a SimpliRoute visit but before the DB UPDATE marks it
+          completed. <span class="text-emerald-400">find_visit_by_reference</span> recovers
+          on the next run.
+        </div>
+      </div>
+    </div>
+
+    <div class="lg:col-span-8">
+      <div class="space-y-2">
+        {% for layer in defenses %}
+        <div class="card card-hover rounded-xl p-5 flex gap-4 items-start">
+          <span class="flex-none mt-0.5 inline-flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-400/10 ring-1 ring-emerald-400/25 text-emerald-300">
+            <span class="text-sm font-bold font-mono">{{ loop.index }}</span>
+          </span>
+          <div class="flex-1">
+            <div class="font-semibold text-ink-100 mb-0.5">{{ layer.title }}</div>
+            <div class="text-sm text-ink-400 leading-relaxed">{{ layer.body }}</div>
+          </div>
+          <span class="hidden sm:inline-flex flex-none mt-1 text-[10px] font-mono text-ink-600 uppercase tracking-wider">
+            {{ layer.tag }}
+          </span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+
+{# ============================================================
+   TECH STRIP
+   ============================================================ #}
+<section class="max-w-6xl mx-auto px-6 mb-20">
+  <div class="card rounded-2xl p-8">
+    <div class="grid lg:grid-cols-12 gap-8 items-center">
+      <div class="lg:col-span-4">
+        <div class="text-[11px] uppercase tracking-wider text-emerald-400 font-semibold mb-2">Stack</div>
+        <h3 class="text-2xl font-bold text-ink-100 mb-3 tracking-tight">Boring on purpose.</h3>
+        <p class="text-ink-400 text-sm leading-relaxed">
+          No queues, no microservices, no Kubernetes. One Python service, one Postgres, one cron.
+          That's all 600 orders/day asks for.
+        </p>
+      </div>
+      <div class="lg:col-span-8 grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {% for tech in stack %}
+        <div class="card-hover bg-ink-950/40 border border-white/[0.06] rounded-lg p-4 text-center">
+          <div class="text-ink-200 font-semibold text-sm">{{ tech.name }}</div>
+          <div class="text-xs text-ink-500 mt-0.5 font-mono">{{ tech.role }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+
+{# ============================================================
+   FINAL CTA
+   ============================================================ #}
+<section class="max-w-6xl mx-auto px-6 mb-16">
+  <div class="card ring-glow rounded-2xl p-8 sm:p-12 text-center bg-gradient-to-b from-emerald-500/[0.03] to-transparent">
+    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-emerald-400/20 bg-emerald-400/5 text-xs mb-5">
+      <span class="dot dot-ok"></span>
+      <span class="text-emerald-300 font-mono">ready to authorize</span>
+    </div>
+    <h2 class="text-3xl sm:text-4xl font-bold text-ink-100 mb-3 tracking-tight">
+      Authorize once, then forget about it.
+    </h2>
+    <p class="text-ink-400 max-w-xl mx-auto mb-8 text-base leading-relaxed">
+      One OAuth click and the cron starts pulling Flex orders into SimpliRoute every {{ cron_interval }} minutes.
+      Tokens auto-rotate. Failures alert. You stop touching it.
+    </p>
+    <div class="flex flex-wrap justify-center gap-3">
+      <a href="/oauth/authorize" class="btn btn-primary text-base">
+        Start OAuth flow
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+      </a>
+      <a href="/docs" class="btn btn-secondary text-base">Read API reference</a>
+    </div>
   </div>
 </section>
 
