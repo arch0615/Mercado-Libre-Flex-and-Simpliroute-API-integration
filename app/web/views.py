@@ -90,6 +90,141 @@ def index(request: Request, session: Session = Depends(get_db)) -> HTMLResponse:
     )
 
 
+@router.get("/docs", response_class=HTMLResponse, name="api_reference")
+def api_reference(request: Request) -> HTMLResponse:
+    """Curated, themed API reference. Native Swagger UI lives at /swagger."""
+    settings = get_settings()
+    base_url = str(request.base_url).rstrip("/")
+    public_url = base_url
+
+    groups = [
+        {
+            "tag": "Operator surfaces",
+            "tag_subtitle": "Pages a human will open in a browser. No auth required.",
+            "color": "emerald",
+            "endpoints": [
+                {
+                    "method": "GET",
+                    "path": "/",
+                    "summary": "Landing page",
+                    "description": "Service overview, live status pill, anti-duplicate guarantees.",
+                    "auth": None,
+                    "response_kind": "html",
+                    "example_curl": f"curl {public_url}/",
+                    "example_response": "<!doctype html>...",
+                },
+                {
+                    "method": "GET",
+                    "path": "/status",
+                    "summary": "Operator status",
+                    "description": "Read-only view: DB, cron, ML token, recent runs and alerts. Auto-refreshes every 30s.",
+                    "auth": None,
+                    "response_kind": "html",
+                    "example_curl": f"curl {public_url}/status",
+                    "example_response": "<!doctype html>...",
+                },
+            ],
+        },
+        {
+            "tag": "OAuth",
+            "tag_subtitle": "Mercado Libre authorization flow. Browser-driven.",
+            "color": "cyan",
+            "endpoints": [
+                {
+                    "method": "GET",
+                    "path": "/oauth/authorize",
+                    "summary": "Start OAuth flow",
+                    "description": "Redirects to ML's authorization page. After the seller approves, ML calls back to /oauth/callback.",
+                    "auth": None,
+                    "response_kind": "redirect",
+                    "params": [{"name": "state", "in": "query", "required": False, "type": "string", "desc": "Optional opaque value echoed back in the callback."}],
+                    "example_curl": f"open {public_url}/oauth/authorize",
+                    "example_response": "302 Found\\nLocation: https://auth.mercadolibre.com.ar/authorization?...",
+                },
+                {
+                    "method": "GET",
+                    "path": "/oauth/callback",
+                    "summary": "OAuth redirect target",
+                    "description": "ML calls this with ?code=... after the user authorizes. Exchanges the code for an access + refresh token pair and persists them. Returns an HTML success or error page.",
+                    "auth": None,
+                    "response_kind": "html",
+                    "params": [
+                        {"name": "code",  "in": "query", "required": True,  "type": "string", "desc": "Single-use authorization code from ML."},
+                        {"name": "error", "in": "query", "required": False, "type": "string", "desc": "Error code if the user denied the request."},
+                    ],
+                    "example_curl": f"# called by ML, not directly\\n# {public_url}/oauth/callback?code=TG-abc123",
+                    "example_response": "200 OK · oauth_success.html",
+                },
+            ],
+        },
+        {
+            "tag": "Internal · cron",
+            "tag_subtitle": "Triggered by Railway cron jobs. Require X-Internal-Secret header.",
+            "color": "amber",
+            "endpoints": [
+                {
+                    "method": "POST",
+                    "path": "/internal/run",
+                    "summary": "Run the sync job",
+                    "description": "Acquires the advisory lock, fetches new Flex orders since the last successful run, processes each through the two-stage write into SimpliRoute, finalizes a cron_runs row.",
+                    "auth": "X-Internal-Secret",
+                    "response_kind": "json",
+                    "example_curl": f"curl -X POST {public_url}/internal/run \\\\\n  -H \"X-Internal-Secret: $INTERNAL_SECRET\"",
+                    "example_response": '{\n  "cron_run_id": 42,\n  "status": "success",\n  "processed": 3,\n  "skipped": 0,\n  "manual_review": 0,\n  "errors": 0\n}',
+                },
+                {
+                    "method": "POST",
+                    "path": "/internal/watchdog",
+                    "summary": "Cron health watchdog",
+                    "description": f"Alerts via Telegram if no cron_runs row with status=success has been written in the last {settings.cron_watchdog_minutes} minutes. Run on its own schedule (every 10 min) so a wedged main job doesn't silence itself.",
+                    "auth": "X-Internal-Secret",
+                    "response_kind": "json",
+                    "example_curl": f"curl -X POST {public_url}/internal/watchdog \\\\\n  -H \"X-Internal-Secret: $INTERNAL_SECRET\"",
+                    "example_response": '{\n  "healthy": true,\n  "minutes_since_last_success": 12,\n  "alerted": false\n}',
+                },
+                {
+                    "method": "POST",
+                    "path": "/internal/token-health",
+                    "summary": "Preventive token refresh",
+                    "description": "Forces a refresh_access_token exchange when the current refresh_token is older than 5 months. ML refresh tokens die at 6 months — this leaves ~1 month of safety margin. Run weekly.",
+                    "auth": "X-Internal-Secret",
+                    "response_kind": "json",
+                    "example_curl": f"curl -X POST {public_url}/internal/token-health \\\\\n  -H \"X-Internal-Secret: $INTERNAL_SECRET\"",
+                    "example_response": '{\n  "refreshed": false,\n  "age_days": 21,\n  "alerted": false\n}',
+                },
+            ],
+        },
+        {
+            "tag": "Health",
+            "tag_subtitle": "Liveness probe. No auth.",
+            "color": "slate",
+            "endpoints": [
+                {
+                    "method": "GET",
+                    "path": "/health",
+                    "summary": "Liveness + DB probe",
+                    "description": "Returns service + DB status and the timestamp of the last successful cron run. Used by Railway healthchecks.",
+                    "auth": None,
+                    "response_kind": "json",
+                    "example_curl": f"curl {public_url}/health",
+                    "example_response": '{\n  "status": "ok",\n  "db": "ok",\n  "last_cron_run": "2026-04-23T12:34:56+00:00",\n  "last_cron_age_seconds": 145\n}',
+                },
+            ],
+        },
+    ]
+
+    return templates.TemplateResponse(
+        request,
+        "api.html",
+        {
+            "now": _now_str(),
+            "base_url": public_url,
+            "groups": groups,
+            "endpoint_count": sum(len(g["endpoints"]) for g in groups),
+        },
+    )
+
+
 @router.get("/status", response_class=HTMLResponse)
 def status_page(request: Request, session: Session = Depends(get_db)) -> HTMLResponse:
     settings = get_settings()

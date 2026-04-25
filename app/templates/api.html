@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% block title %}API reference · Flex → SimpliRoute{% endblock %}
+{% block content %}
+
+<style>
+  /* Sticky table-of-contents nav for the side rail */
+  .toc a.active { color: #ffffff; background: rgba(255,255,255,0.06); border-color: rgba(52,211,153,0.4); }
+
+  /* Method badges */
+  .method {
+    display: inline-flex; align-items: center;
+    padding: .125rem .5rem; border-radius: .375rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .6875rem; font-weight: 600; letter-spacing: .025em;
+    border: 1px solid;
+  }
+  .method-get  { color: #6ee7b7; background: rgba(16,185,129,.08); border-color: rgba(16,185,129,.3); }
+  .method-post { color: #93c5fd; background: rgba(59,130,246,.08); border-color: rgba(59,130,246,.3); }
+  .method-put,.method-patch { color: #fcd34d; background: rgba(245,158,11,.08); border-color: rgba(245,158,11,.3); }
+  .method-delete { color: #fda4af; background: rgba(244,63,94,.08); border-color: rgba(244,63,94,.3); }
+
+  /* Code block */
+  .code-block {
+    background: #020617;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: .625rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .8125rem;
+    line-height: 1.55;
+    color: #cbd5e1;
+    padding: 1rem;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .code-block .comment { color: #64748b; }
+  .code-block .punc { color: #94a3b8; }
+  .code-block .key { color: #93c5fd; }
+  .code-block .str { color: #6ee7b7; }
+  .code-block .num { color: #fcd34d; }
+
+  /* Tab buttons (curl / response) */
+  .tab-btn {
+    padding: .375rem .75rem;
+    font-size: .75rem; font-weight: 500;
+    color: #94a3b8;
+    border-bottom: 1px solid transparent;
+    transition: all .15s ease;
+    cursor: pointer;
+  }
+  .tab-btn.active { color: #ffffff; border-bottom-color: #34d399; }
+  .tab-btn:hover { color: #e2e8f0; }
+</style>
+
+{# ============================================================
+   HERO
+   ============================================================ #}
+<section class="max-w-6xl mx-auto px-6 pt-12 pb-10 animate-fade-up">
+  <div class="text-[11px] uppercase tracking-wider text-emerald-400 font-semibold mb-3">API reference · v1.0.0</div>
+  <h1 class="text-4xl sm:text-5xl font-bold tracking-tight text-gradient mb-4 leading-[1.05]">
+    {{ endpoint_count }} endpoints,<br>
+    <span class="text-emerald-400">one shared secret.</span>
+  </h1>
+  <p class="text-lg text-ink-300 max-w-2xl leading-relaxed">
+    All routes the service exposes, grouped by surface. Operator surfaces are
+    public; <code class="font-mono text-sm bg-white/5 px-2 py-0.5 rounded text-ink-100">/internal/*</code>
+    requires the <code class="font-mono text-sm bg-white/5 px-2 py-0.5 rounded text-ink-100">X-Internal-Secret</code> header.
+  </p>
+  <div class="mt-6 flex flex-wrap items-center gap-3">
+    <a href="/swagger" class="btn btn-secondary text-sm">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+      Open in Swagger UI
+    </a>
+    <a href="/openapi.json" class="btn btn-secondary text-sm">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+      Download OpenAPI
+    </a>
+    <span class="text-xs text-ink-500 font-mono ml-1">base · {{ base_url }}</span>
+  </div>
+</section>
+
+{# ============================================================
+   AUTH PRIMER
+   ============================================================ #}
+<section class="max-w-6xl mx-auto px-6 mb-12">
+  <div class="grid lg:grid-cols-12 gap-6">
+    <div class="lg:col-span-4">
+      <div class="text-[11px] uppercase tracking-wider text-emerald-400 font-semibold mb-2">Auth</div>
+      <h2 class="text-2xl font-bold text-ink-100 tracking-tight mb-2">One header, two surfaces.</h2>
+      <p class="text-sm text-ink-400 leading-relaxed">
+        Operator HTML pages and the OAuth flow are public. Anything under
+        <code class="font-mono text-xs bg-white/5 px-1.5 py-0.5 rounded text-ink-200">/internal</code>
+        verifies <code class="font-mono text-xs bg-white/5 px-1.5 py-0.5 rounded text-ink-200">X-Internal-Secret</code>
+        with a constant-time comparison.
+      </p>
+    </div>
+    <div class="lg:col-span-8">
+      <div class="card rounded-xl p-1">
+        <div class="rounded-lg bg-ink-950/70 px-5 py-4 border-b border-white/[0.06] flex items-center justify-between">
+          <div class="text-xs font-mono text-ink-400">Required header on /internal/*</div>
+          <span class="badge badge-amber">protected</span>
+        </div>
+        <pre class="code-block rounded-t-none border-0 mb-0"><span class="key">X-Internal-Secret</span><span class="punc">:</span> <span class="str">$INTERNAL_SECRET</span>
+<span class="comment"># 401 if missing, 401 if mismatched (constant-time compare)</span></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+{# ============================================================
+   ENDPOINT GROUPS
+   ============================================================ #}
+{% for group in groups %}
+<section class="max-w-6xl mx-auto px-6 mb-12" id="group-{{ loop.index }}">
+  <div class="flex items-end justify-between mb-5 flex-wrap gap-2">
+    <div>
+      <div class="text-[11px] uppercase tracking-wider font-semibold mb-1
+        {% if group.color == 'emerald' %}text-emerald-400
+        {% elif group.color == 'cyan' %}text-cyan-400
+        {% elif group.color == 'amber' %}text-amber-400
+        {% else %}text-ink-400{% endif %}">
+        Group · {{ loop.index }} of {{ groups | length }}
+      </div>
+      <h2 class="text-2xl font-bold text-ink-100 tracking-tight">{{ group.tag }}</h2>
+      <p class="text-sm text-ink-400 mt-1">{{ group.tag_subtitle }}</p>
+    </div>
+    <span class="text-[11px] font-mono text-ink-600">{{ group.endpoints | length }} endpoint{{ '' if group.endpoints | length == 1 else 's' }}</span>
+  </div>
+
+  <div class="space-y-4">
+    {% for ep in group.endpoints %}
+    <div class="card rounded-xl overflow-hidden">
+
+      {# Endpoint header: METHOD path summary #}
+      <div class="px-5 py-4 border-b border-white/[0.06] flex items-start gap-4 flex-wrap">
+        <span class="method method-{{ ep.method | lower }}">{{ ep.method }}</span>
+        <code class="font-mono text-base text-ink-100 font-medium leading-tight">{{ ep.path }}</code>
+        {% if ep.auth %}
+        <span class="badge badge-amber ml-auto">
+          <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/></svg>
+          {{ ep.auth }}
+        </span>
+        {% else %}
+        <span class="badge badge-emerald ml-auto">public</span>
+        {% endif %}
+      </div>
+
+      <div class="p-5">
+        <div class="grid lg:grid-cols-12 gap-6">
+
+          {# Left: description + params #}
+          <div class="lg:col-span-5">
+            <div class="text-sm font-semibold text-ink-100 mb-1">{{ ep.summary }}</div>
+            <p class="text-sm text-ink-400 leading-relaxed mb-4">{{ ep.description }}</p>
+
+            {% if ep.params %}
+            <div class="mb-4">
+              <div class="text-[11px] uppercase tracking-wider text-ink-500 font-semibold mb-2">Parameters</div>
+              <div class="rounded-lg border border-white/[0.06] overflow-hidden">
+                <table class="w-full text-xs">
+                  <tbody class="divide-y divide-white/[0.05]">
+                    {% for p in ep.params %}
+                    <tr>
+                      <td class="px-3 py-2 align-top">
+                        <code class="font-mono text-ink-100">{{ p.name }}</code>
+                        {% if p.required %}<span class="text-rose-300 ml-1">*</span>{% endif %}
+                        <div class="text-[10px] text-ink-500 font-mono mt-0.5">{{ p.in }} · {{ p.type }}</div>
+                      </td>
+                      <td class="px-3 py-2 text-ink-400 align-top">{{ p.desc }}</td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            {% endif %}
+
+            <div class="text-[11px] uppercase tracking-wider text-ink-500 font-semibold mb-2">Returns</div>
+            <span class="badge {% if ep.response_kind == 'json' %}badge-emerald{% elif ep.response_kind == 'html' %}badge-slate{% else %}badge-amber{% endif %}">
+              {{ ep.response_kind }}
+            </span>
+          </div>
+
+          {# Right: tabs (curl + example response) #}
+          <div class="lg:col-span-7">
+            <div class="rounded-lg border border-white/[0.06] overflow-hidden">
+              <div class="flex border-b border-white/[0.06] bg-white/[0.02]" data-tabs="ep-{{ loop.index0 }}-{{ loop.index }}">
+                <button type="button" class="tab-btn active" data-tab="curl">curl</button>
+                <button type="button" class="tab-btn" data-tab="response">response</button>
+              </div>
+              <div data-pane="curl">
+                <pre class="code-block rounded-none border-0 mb-0">{{ ep.example_curl }}</pre>
+              </div>
+              <div data-pane="response" hidden>
+                <pre class="code-block rounded-none border-0 mb-0">{{ ep.example_response }}</pre>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endfor %}
+
+{# ============================================================
+   FOOTER NOTE
+   ============================================================ #}
+<section class="max-w-6xl mx-auto px-6 mb-16">
+  <div class="card rounded-xl p-6 flex items-start gap-4 flex-wrap">
+    <div class="flex-1 min-w-0">
+      <div class="text-sm font-semibold text-ink-100 mb-1">Need to try a request live?</div>
+      <p class="text-sm text-ink-400">
+        The native Swagger UI is at <a href="/swagger" class="text-emerald-400 hover:text-emerald-300 font-mono underline underline-offset-4 decoration-emerald-400/30">/swagger</a>
+        with "Try it out" forms. The raw OpenAPI spec is at <a href="/openapi.json" class="text-emerald-400 hover:text-emerald-300 font-mono underline underline-offset-4 decoration-emerald-400/30">/openapi.json</a>.
+      </p>
+    </div>
+    <a href="/swagger" class="btn btn-primary text-sm">Open Swagger UI</a>
+  </div>
+</section>
+
+<script>
+  // Tabbed code samples per endpoint
+  document.querySelectorAll('[data-tabs]').forEach(group => {
+    const buttons = group.querySelectorAll('.tab-btn');
+    const card = group.parentElement;
+    buttons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        buttons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        card.querySelectorAll('[data-pane]').forEach(p => {
+          p.hidden = (p.dataset.pane !== btn.dataset.tab);
+        });
+      });
+    });
+  });
+</script>
+
+{% endblock %}

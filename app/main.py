@@ -23,7 +23,9 @@ app = FastAPI(
         "**Programmatic surfaces:** the routes below."
     ),
     version="1.0.0",
-    docs_url="/docs",
+    # Custom themed reference at /docs (see app/web/views.py).
+    # Native Swagger UI moved to /swagger for interactive try-it-out.
+    docs_url="/swagger",
     redoc_url=None,
     openapi_tags=[
         {"name": "oauth", "description": "Mercado Libre OAuth 2.0 flow."},
