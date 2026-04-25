@@ -1,10 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import RedirectResponse
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.logging import logger
 from app.ml import oauth
+from app.web.templates import templates
 
 router = APIRouter(prefix="/oauth", tags=["oauth"])
 
@@ -15,22 +18,32 @@ def authorize(state: str | None = Query(default=None)) -> RedirectResponse:
     return RedirectResponse(url=url, status_code=302)
 
 
-@router.get("/callback")
+def _error_page(request: Request, message: str, http_status: int) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "oauth_error.html",
+        {"now": _now_str(), "error_message": message},
+        status_code=http_status,
+    )
+
+
+@router.get("/callback", response_class=HTMLResponse)
 def callback(
+    request: Request,
     code: str | None = Query(default=None),
     error: str | None = Query(default=None),
     session: Session = Depends(get_db),
-) -> dict:
+) -> HTMLResponse:
     if error:
-        raise HTTPException(status_code=400, detail=f"Authorization failed: {error}")
+        return _error_page(request, f"Mercado Libre returned: {error}", 400)
     if not code:
-        raise HTTPException(status_code=400, detail="Missing `code` query parameter")
+        return _error_page(request, "Missing `code` query parameter.", 400)
 
     try:
         payload = oauth.exchange_code_for_token(code)
     except oauth.OAuthError as exc:
         logger.error("ml_oauth_callback_failed", error=str(exc))
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return _error_page(request, str(exc), 502)
 
     token = oauth.persist_token(session, payload)
     logger.info(
@@ -38,8 +51,17 @@ def callback(
         account_id=token.account_id,
         expires_at=token.expires_at.isoformat(),
     )
-    return {
-        "status": "ok",
-        "account_id": token.account_id,
-        "expires_at": token.expires_at.isoformat(),
-    }
+    return templates.TemplateResponse(
+        request,
+        "oauth_success.html",
+        {
+            "now": _now_str(),
+            "account_id": token.account_id,
+            "expires_at": token.expires_at.strftime("%Y-%m-%d %H:%M:%S UTC"),
+            "refresh_leeway_min": 5,
+        },
+    )
+
+
+def _now_str() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")

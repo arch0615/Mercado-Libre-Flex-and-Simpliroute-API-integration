@@ -9,15 +9,33 @@ from app.core.logging import configure_logging
 from app.db.models import CronRun, CronRunStatus
 from app.ml.routes import router as oauth_router
 from app.scheduler.routes import router as scheduler_router
+from app.web.views import router as web_router
 
 configure_logging()
 
-app = FastAPI(title="Mercado Libre Flex -> SimpliRoute")
+app = FastAPI(
+    title="Mercado Libre Flex → SimpliRoute",
+    description=(
+        "Headless integration that polls Mercado Libre for new Flex orders "
+        "and registers them as visits in SimpliRoute. Idempotent, tolerant "
+        "to restarts, alerted on failure via Telegram.\n\n"
+        "**Operator surfaces:** see [`/`](/), [`/status`](/status). "
+        "**Programmatic surfaces:** the routes below."
+    ),
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url=None,
+    openapi_tags=[
+        {"name": "oauth", "description": "Mercado Libre OAuth 2.0 flow."},
+        {"name": "internal", "description": "Cron-triggered endpoints. Require `X-Internal-Secret` header."},
+    ],
+)
+app.include_router(web_router)
 app.include_router(oauth_router)
 app.include_router(scheduler_router)
 
 
-@app.get("/health")
+@app.get("/health", tags=["health"], summary="Liveness + DB + last-cron probe")
 def health(session: Session = Depends(get_db)) -> dict:
     try:
         last_run = session.execute(

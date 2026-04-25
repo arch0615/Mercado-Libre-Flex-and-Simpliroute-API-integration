@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Status · Mercado Libre Flex → SimpliRoute{% endblock %}
+{% block content %}
+
+<section class="mb-10">
+  <h1 class="text-2xl font-semibold tracking-tight text-slate-900 mb-1">Service status</h1>
+  <p class="text-slate-600 text-sm">Read-only operator view. Auto-refreshes every 30 seconds.</p>
+</section>
+
+<section class="grid sm:grid-cols-4 gap-4 mb-10">
+  <div class="rounded-xl border border-slate-200 bg-white p-5">
+    <div class="text-xs uppercase tracking-wider text-slate-500 mb-2">Database</div>
+    <div class="flex items-center gap-2">
+      <span class="dot {{ 'dot-ok' if db_ok else 'dot-err' }}"></span>
+      <span class="text-sm font-semibold text-slate-900">{{ 'Connected' if db_ok else 'Down' }}</span>
+    </div>
+  </div>
+  <div class="rounded-xl border border-slate-200 bg-white p-5">
+    <div class="text-xs uppercase tracking-wider text-slate-500 mb-2">Cron</div>
+    <div class="flex items-center gap-2">
+      <span class="dot {{ cron_dot_class }}"></span>
+      <span class="text-sm font-semibold text-slate-900">{{ cron_label }}</span>
+    </div>
+  </div>
+  <div class="rounded-xl border border-slate-200 bg-white p-5">
+    <div class="text-xs uppercase tracking-wider text-slate-500 mb-2">ML token</div>
+    <div class="flex items-center gap-2">
+      <span class="dot {{ token_dot_class }}"></span>
+      <span class="text-sm font-semibold text-slate-900">{{ token_label }}</span>
+    </div>
+  </div>
+  <div class="rounded-xl border border-slate-200 bg-white p-5">
+    <div class="text-xs uppercase tracking-wider text-slate-500 mb-2">Manual review</div>
+    <div class="flex items-center gap-2">
+      <span class="dot {{ 'dot-warn' if manual_review_open > 0 else 'dot-ok' }}"></span>
+      <span class="text-sm font-semibold text-slate-900">{{ manual_review_open }} open</span>
+    </div>
+  </div>
+</section>
+
+<section class="mb-10">
+  <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4">Recent cron runs</h2>
+  <div class="rounded-xl border border-slate-200 bg-white overflow-hidden">
+    {% if cron_runs %}
+    <table class="w-full text-sm">
+      <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+        <tr>
+          <th class="text-left px-4 py-2.5 font-medium">Started</th>
+          <th class="text-left px-4 py-2.5 font-medium">Status</th>
+          <th class="text-right px-4 py-2.5 font-medium">Processed</th>
+          <th class="text-right px-4 py-2.5 font-medium">Skipped</th>
+          <th class="text-right px-4 py-2.5 font-medium">Errors</th>
+          <th class="text-left px-4 py-2.5 font-medium">Notes</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for run in cron_runs %}
+        <tr>
+          <td class="px-4 py-2.5 font-mono text-xs text-slate-700">{{ run.started_at }}</td>
+          <td class="px-4 py-2.5">
+            <span class="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full
+              {% if run.status == 'success' %}bg-emerald-50 text-emerald-700{% elif run.status == 'failed' %}bg-rose-50 text-rose-700{% elif run.status == 'skipped' %}bg-slate-100 text-slate-700{% else %}bg-amber-50 text-amber-700{% endif %}">
+              {{ run.status }}
+            </span>
+          </td>
+          <td class="px-4 py-2.5 text-right font-mono tabular-nums">{{ run.processed_count }}</td>
+          <td class="px-4 py-2.5 text-right font-mono tabular-nums">{{ run.skipped_count }}</td>
+          <td class="px-4 py-2.5 text-right font-mono tabular-nums {% if run.errors_count > 0 %}text-rose-600 font-semibold{% endif %}">{{ run.errors_count }}</td>
+          <td class="px-4 py-2.5 text-xs text-slate-500 truncate max-w-md">{{ run.notes or '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="px-4 py-8 text-center text-sm text-slate-500">No cron runs yet.</div>
+    {% endif %}
+  </div>
+</section>
+
+<section class="mb-10">
+  <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4">Last alerts</h2>
+  <div class="rounded-xl border border-slate-200 bg-white overflow-hidden">
+    {% if alerts %}
+    <table class="w-full text-sm">
+      <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+        <tr>
+          <th class="text-left px-4 py-2.5 font-medium">Last sent</th>
+          <th class="text-left px-4 py-2.5 font-medium">Level</th>
+          <th class="text-left px-4 py-2.5 font-medium">Dedup key</th>
+          <th class="text-left px-4 py-2.5 font-medium">Title</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for a in alerts %}
+        <tr>
+          <td class="px-4 py-2.5 font-mono text-xs text-slate-700">{{ a.last_sent_at }}</td>
+          <td class="px-4 py-2.5">
+            <span class="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full
+              {% if a.last_level == 'critical' %}bg-rose-50 text-rose-700{% elif a.last_level == 'error' %}bg-orange-50 text-orange-700{% elif a.last_level == 'warning' %}bg-amber-50 text-amber-700{% else %}bg-slate-100 text-slate-700{% endif %}">
+              {{ a.last_level or 'info' }}
+            </span>
+          </td>
+          <td class="px-4 py-2.5 font-mono text-xs text-slate-700">{{ a.dedup_key }}</td>
+          <td class="px-4 py-2.5 text-slate-700">{{ a.last_title or '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="px-4 py-8 text-center text-sm text-slate-500">No alerts fired yet.</div>
+    {% endif %}
+  </div>
+</section>
+
+<script>
+  // Refresh once every 30s. Read-only; safe to refresh.
+  setTimeout(() => location.reload(), 30000);
+</script>
+
+{% endblock %}
