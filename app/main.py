@@ -8,6 +8,7 @@ from app.core.db import get_db
 from app.core.logging import configure_logging
 from app.db.models import CronRun, CronRunStatus
 from app.ml.routes import router as oauth_router
+from app.ml.webhooks import router as ml_webhook_router
 from app.scheduler.routes import router as scheduler_router
 from app.web.views import router as web_router
 
@@ -29,11 +30,13 @@ app = FastAPI(
     redoc_url=None,
     openapi_tags=[
         {"name": "oauth", "description": "Mercado Libre OAuth 2.0 flow."},
+        {"name": "ml", "description": "Mercado Libre webhook receiver (low-latency order sync)."},
         {"name": "internal", "description": "Cron-triggered endpoints. Require `X-Internal-Secret` header."},
     ],
 )
 app.include_router(web_router)
 app.include_router(oauth_router)
+app.include_router(ml_webhook_router)
 app.include_router(scheduler_router)
 
 

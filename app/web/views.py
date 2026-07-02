@@ -90,6 +90,17 @@ def index(request: Request, session: Session = Depends(get_db)) -> HTMLResponse:
     )
 
 
+@router.get("/scan", response_class=HTMLResponse)
+def scan_page(request: Request) -> HTMLResponse:
+    """Operator page: scan a Flex label QR with the phone camera.
+
+    The page itself is public HTML/JS; the actual import call it makes to
+    /internal/scan is still protected by the internal secret, which the
+    operator enters once and the browser remembers.
+    """
+    return templates.TemplateResponse(request, "scan.html", {"now": _now_str()})
+
+
 @router.get("/docs", response_class=HTMLResponse, name="api_reference")
 def api_reference(request: Request) -> HTMLResponse:
     """Curated, themed API reference. Native Swagger UI lives at /swagger."""

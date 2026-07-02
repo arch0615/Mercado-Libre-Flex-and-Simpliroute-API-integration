@@ -19,9 +19,11 @@ from typing import Iterator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.alerts import service as alerts
 from app.core.config import get_settings
 from app.core.logging import logger
 from app.db.models import CronRun, CronRunStatus
+from app.db.models import ManualReview as ManualReviewRow
 from app.ml.api import MLClient
 
 PAGE_SIZE = 50
@@ -29,6 +31,10 @@ PAGE_SIZE = 50
 DEFAULT_LOOKBACK = timedelta(hours=24)
 # Overlap the window to tolerate clock skew.
 CURSOR_OVERLAP = timedelta(minutes=15)
+
+# Reason stored on manual_review when a fetched order can't be turned into a
+# visit because it carries no shipment (e.g. one leg of a multi-order pack).
+REASON_NO_SHIPMENT = "no_shipment_id"
 
 
 @dataclass
@@ -84,15 +90,39 @@ def fetch_new_orders(session: Session, *, since: datetime, client: MLClient) -> 
         shipping = order.get("shipping") or {}
         shipment_id = shipping.get("id")
         if not shipment_id:
+            # A paid/ready order with no shipment is anomalous — most often one
+            # leg of a multi-order pack where only the primary order carries the
+            # shipment. This used to be a silent debug log, which is exactly how
+            # a sale could vanish with no trace (see the "2 sales, 1 visit"
+            # report). Never drop it silently: flag for manual review + alert.
             summary.skipped_no_shipment += 1
-            logger.debug("order_skipped_no_shipment", ml_order_id=order.get("id"))
+            logger.warning(
+                "order_dropped_no_shipment",
+                ml_order_id=order.get("id"),
+                pack_id=order.get("pack_id"),
+            )
+            _flag_dropped_order(
+                session, order, REASON_NO_SHIPMENT, "Order has no shipping.id"
+            )
             continue
 
         shipment = client.get(f"/shipments/{shipment_id}")
         if shipment.get("logistic_type") != "self_service":
             summary.skipped_non_flex += 1
+            logger.debug(
+                "order_skipped_non_flex",
+                ml_order_id=order.get("id"),
+                pack_id=order.get("pack_id"),
+                logistic_type=shipment.get("logistic_type"),
+            )
             continue
 
+        logger.debug(
+            "order_fetched_flex",
+            ml_order_id=order.get("id"),
+            pack_id=order.get("pack_id"),
+            shipment_id=shipment_id,
+        )
         summary.fetched.append(FetchedOrder(order=order, shipment=shipment))
 
     logger.info(
@@ -143,3 +173,86 @@ def _format_iso(dt: datetime) -> str:
         dt = dt.replace(tzinfo=timezone.utc)
     # Strip microseconds, keep offset.
     return dt.replace(microsecond=0).isoformat()
+
+
+def _flag_dropped_order(
+    session: Session, order: dict, reason: str, detail: str
+) -> None:
+    """Record a manual_review row (idempotent) + alert for a dropped order.
+
+    Fetch-time drops used to be a silent `debug` log — the reason a sale could
+    disappear unnoticed. Surfacing them here guarantees a visible trace on the
+    status page (manual_review count) and a Telegram alert.
+    """
+    ml_order_id = str(order.get("id"))
+    existing = session.execute(
+        select(ManualReviewRow).where(ManualReviewRow.ml_order_id == ml_order_id)
+    ).scalar_one_or_none()
+    if existing is None:
+        session.add(
+            ManualReviewRow(
+                ml_order_id=ml_order_id,
+                reason=reason[:128],
+                raw_payload={"order": order, "detail": detail},
+            )
+        )
+        session.commit()
+    alerts.alert_manual_review(session, ml_order_id, reason)
+
+
+# -- On-demand single-order resolution (webhook + QR-scan paths) --
+
+
+def fetch_order_by_id(client: MLClient, ml_order_id: str) -> FetchedOrder | None:
+    """Fetch one order + its shipment, keeping it only if it's Flex.
+
+    Returns None when the order has no shipment or isn't self_service. Used by
+    the webhook path, which resolves a single order the moment ML notifies us.
+    """
+    order = client.get(f"/orders/{ml_order_id}")
+    return _build_flex_order(client, order)
+
+
+def fetch_order_by_shipment(
+    client: MLClient, shipment_id: str
+) -> FetchedOrder | None:
+    """Resolve an order from a shipment id, keeping it only if it's Flex.
+
+    The Flex label QR encodes a shipment id; we read the shipment to find its
+    order, then build the same FetchedOrder the cron path produces. Returns
+    None when the shipment isn't Flex or has no resolvable order.
+    """
+    shipment = client.get(f"/shipments/{shipment_id}")
+    if shipment.get("logistic_type") != "self_service":
+        logger.info(
+            "shipment_not_flex",
+            shipment_id=shipment_id,
+            logistic_type=shipment.get("logistic_type"),
+        )
+        return None
+    order_id = shipment.get("order_id")
+    if not order_id:
+        orders = shipment.get("orders") or []
+        order_id = orders[0].get("id") if orders else None
+    if not order_id:
+        logger.warning("shipment_without_order", shipment_id=shipment_id)
+        return None
+    order = client.get(f"/orders/{order_id}")
+    return FetchedOrder(order=order, shipment=shipment)
+
+
+def _build_flex_order(client: MLClient, order: dict) -> FetchedOrder | None:
+    shipping = order.get("shipping") or {}
+    shipment_id = shipping.get("id")
+    if not shipment_id:
+        logger.info("single_order_no_shipment", ml_order_id=order.get("id"))
+        return None
+    shipment = client.get(f"/shipments/{shipment_id}")
+    if shipment.get("logistic_type") != "self_service":
+        logger.info(
+            "single_order_not_flex",
+            ml_order_id=order.get("id"),
+            logistic_type=shipment.get("logistic_type"),
+        )
+        return None
+    return FetchedOrder(order=order, shipment=shipment)

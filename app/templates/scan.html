@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% block title %}Escanear etiqueta Flex → SimpliRoute{% endblock %}
+{% block content %}
+<section class="max-w-2xl mx-auto px-6 py-10 animate-fade-up">
+
+  <div class="mb-6">
+    <span class="badge badge-emerald mb-3">Flex · escaneo</span>
+    <h1 class="text-2xl font-bold text-gradient">Escanear etiqueta</h1>
+    <p class="text-ink-400 text-sm mt-1">
+      Apuntá la cámara al QR de la etiqueta. Cada paquete se carga una sola vez:
+      escanear dos veces el mismo nunca lo duplica.
+    </p>
+  </div>
+
+  <!-- Secret gate -->
+  <div id="secret-box" class="card rounded-2xl p-4 mb-4 hidden">
+    <label class="block text-xs uppercase tracking-wider text-ink-400 mb-2 font-semibold">
+      Clave interna (X-Internal-Secret)
+    </label>
+    <div class="flex gap-2">
+      <input id="secret-input" type="password" autocomplete="off"
+        class="flex-1 bg-ink-900/70 border border-white/10 rounded-lg px-3 py-2 text-sm text-ink-100 outline-none focus:border-emerald-400/40"
+        placeholder="Pegá la clave una sola vez">
+      <button id="secret-save" class="btn btn-primary text-sm">Guardar</button>
+    </div>
+    <p class="text-ink-500 text-xs mt-2">Se guarda solo en este dispositivo.</p>
+  </div>
+
+  <!-- Camera -->
+  <div class="card rounded-2xl overflow-hidden ring-glow">
+    <div id="reader" class="w-full bg-black aspect-square"></div>
+    <div class="p-4 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2 text-sm">
+        <span id="cam-dot" class="dot dot-idle"></span>
+        <span id="cam-label" class="text-ink-300">Cámara detenida</span>
+      </div>
+      <div class="flex gap-2">
+        <button id="btn-start" class="btn btn-primary text-sm">Iniciar cámara</button>
+        <button id="btn-stop" class="btn btn-secondary text-sm hidden">Detener</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Counters -->
+  <div class="grid grid-cols-3 gap-3 mt-4">
+    <div class="card rounded-xl p-3 text-center">
+      <div id="c-created" class="stat-num text-2xl font-bold text-emerald-300">0</div>
+      <div class="text-[11px] uppercase tracking-wider text-ink-500 mt-1">Creadas</div>
+    </div>
+    <div class="card rounded-xl p-3 text-center">
+      <div id="c-dupe" class="stat-num text-2xl font-bold text-ink-200">0</div>
+      <div class="text-[11px] uppercase tracking-wider text-ink-500 mt-1">Ya cargadas</div>
+    </div>
+    <div class="card rounded-xl p-3 text-center">
+      <div id="c-error" class="stat-num text-2xl font-bold text-rose-300">0</div>
+      <div class="text-[11px] uppercase tracking-wider text-ink-500 mt-1">Errores</div>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div class="mt-4">
+    <div class="text-ink-400 text-xs uppercase tracking-wider mb-2 font-semibold">Últimos escaneos</div>
+    <ul id="log" class="space-y-2 text-sm"></ul>
+    <p id="log-empty" class="text-ink-500 text-sm">Todavía no escaneaste nada.</p>
+  </div>
+
+</section>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+(function () {
+  const SECRET_KEY = "flex_internal_secret";
+  const COOLDOWN_MS = 5000;      // ignore the same code within this window
+  const recent = new Map();      // decodedText -> last-handled timestamp
+  const inflight = new Set();    // decodedText currently being posted
+  const counts = { created: 0, dupe: 0, error: 0 };
+
+  const $ = (id) => document.getElementById(id);
+  const secretBox = $("secret-box");
+  const camDot = $("cam-dot");
+  const camLabel = $("cam-label");
+  const btnStart = $("btn-start");
+  const btnStop = $("btn-stop");
+  let qr = null;
+
+  function getSecret() { return localStorage.getItem(SECRET_KEY) || ""; }
+
+  function ensureSecret() {
+    if (getSecret()) { secretBox.classList.add("hidden"); return true; }
+    secretBox.classList.remove("hidden");
+    $("secret-input").focus();
+    return false;
+  }
+
+  $("secret-save").addEventListener("click", () => {
+    const v = $("secret-input").value.trim();
+    if (!v) return;
+    localStorage.setItem(SECRET_KEY, v);
+    $("secret-input").value = "";
+    secretBox.classList.add("hidden");
+  });
+
+  function bump(kind) {
+    counts[kind]++;
+    $("c-created").textContent = counts.created;
+    $("c-dupe").textContent = counts.dupe;
+    $("c-error").textContent = counts.error;
+  }
+
+  function logRow({ tone, title, detail }) {
+    $("log-empty").classList.add("hidden");
+    const badge = { ok: "badge-emerald", dupe: "badge-slate", err: "badge-rose" }[tone];
+    const li = document.createElement("li");
+    li.className = "card rounded-xl px-3 py-2 flex items-center justify-between gap-3 animate-fade-up";
+    li.innerHTML =
+      '<div class="min-w-0"><div class="text-ink-100 truncate">' + title + '</div>' +
+      '<div class="text-ink-500 text-xs font-mono truncate">' + detail + '</div></div>' +
+      '<span class="badge ' + badge + ' shrink-0">' + tone + '</span>';
+    const log = $("log");
+    log.prepend(li);
+    while (log.children.length > 20) log.removeChild(log.lastChild);
+  }
+
+  function feedbackOk() { if (navigator.vibrate) navigator.vibrate(80); }
+  function feedbackErr() { if (navigator.vibrate) navigator.vibrate([40, 60, 40]); }
+
+  async function handleCode(decodedText) {
+    const now = Date.now();
+    if (inflight.has(decodedText)) return;
+    const last = recent.get(decodedText);
+    if (last && now - last < COOLDOWN_MS) return;
+    recent.set(decodedText, now);
+    inflight.add(decodedText);
+
+    if (!getSecret()) { ensureSecret(); inflight.delete(decodedText); return; }
+
+    try {
+      const res = await fetch("/internal/scan", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Internal-Secret": getSecret(),
+        },
+        body: JSON.stringify({ qr: decodedText }),
+      });
+
+      if (res.status === 401) {
+        localStorage.removeItem(SECRET_KEY);
+        bump("error"); feedbackErr();
+        logRow({ tone: "err", title: "Clave inválida", detail: "Volvé a ingresar la clave interna" });
+        ensureSecret();
+        return;
+      }
+      if (res.status === 422) {
+        bump("error"); feedbackErr();
+        logRow({ tone: "err", title: "QR no reconocido", detail: decodedText.slice(0, 48) });
+        return;
+      }
+
+      const data = await res.json();
+      if (!data.found) {
+        bump("error"); feedbackErr();
+        logRow({ tone: "err", title: "Sin pedido Flex", detail: (data.reason || "") + " · envío " + data.shipping_id });
+        return;
+      }
+      if (data.outcome === "skipped_duplicate") {
+        bump("dupe"); feedbackOk();
+        logRow({ tone: "dupe", title: "Ya estaba cargada", detail: "ML#" + data.ml_order_id });
+      } else if (data.outcome === "completed" || data.outcome === "recovered") {
+        bump("created"); feedbackOk();
+        logRow({ tone: "ok", title: "Visita creada", detail: "ML#" + data.ml_order_id + " · envío " + data.shipping_id });
+      } else {
+        // manual_review / permanent_failed / transient_failed
+        bump("error"); feedbackErr();
+        logRow({ tone: "err", title: "Necesita revisión", detail: data.outcome + " · ML#" + (data.ml_order_id || "?") });
+      }
+    } catch (e) {
+      bump("error"); feedbackErr();
+      logRow({ tone: "err", title: "Error de red", detail: String(e).slice(0, 48) });
+    } finally {
+      inflight.delete(decodedText);
+    }
+  }
+
+  async function start() {
+    if (!ensureSecret()) return;
+    if (!qr) qr = new Html5Qrcode("reader");
+    try {
+      await qr.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 240, height: 240 } },
+        handleCode,
+        () => {}   // per-frame decode failures are normal; ignore
+      );
+      camDot.className = "dot dot-ok";
+      camLabel.textContent = "Escaneando…";
+      btnStart.classList.add("hidden");
+      btnStop.classList.remove("hidden");
+    } catch (e) {
+      camDot.className = "dot dot-err";
+      camLabel.textContent = "No se pudo abrir la cámara";
+      logRow({ tone: "err", title: "Cámara bloqueada", detail: "Permití el acceso y usá HTTPS" });
+    }
+  }
+
+  async function stop() {
+    if (qr) { try { await qr.stop(); } catch (e) {} }
+    camDot.className = "dot dot-idle";
+    camLabel.textContent = "Cámara detenida";
+    btnStop.classList.add("hidden");
+    btnStart.classList.remove("hidden");
+  }
+
+  btnStart.addEventListener("click", start);
+  btnStop.addEventListener("click", stop);
+  ensureSecret();
+})();
+</script>
+{% endblock %}

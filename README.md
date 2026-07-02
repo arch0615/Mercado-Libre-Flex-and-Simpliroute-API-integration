@@ -4,7 +4,7 @@ Automated service that polls Mercado Libre for new Flex orders and registers
 them as visits in SimpliRoute, without human intervention. Idempotent,
 tolerant to restarts, alerted via Telegram on failures.
 
-**Version:** v1.0.0 · **Test suite:** 111 tests, all passing · **Stack:** Python 3.11 + FastAPI + PostgreSQL + Railway
+**Version:** v1.0.0 · **Test suite:** 140 tests, all passing · **Stack:** Python 3.11 + FastAPI + PostgreSQL + Railway
 
 ## Requirements
 
@@ -64,6 +64,41 @@ Response:
 ```json
 {"cron_run_id": 42, "status": "success",
  "processed": 3, "skipped": 0, "manual_review": 0, "errors": 0}
+```
+
+## Low-latency sync (webhook)
+
+Polling every 20 min means a sale can take that long to appear as a visit.
+For near-instant sync, register `POST /ml/notifications` as the app's
+Mercado Libre notification callback (topics `orders_v2` / `shipments`). We
+ack with `200` immediately and process the single order in the background,
+so the visit lands seconds after the sale — reusing the same idempotent
+path as the cron (a notification racing the cron never duplicates). The
+cron stays on as a safety net; shorten its interval in Railway if you want
+a tighter backstop.
+
+## Importing a Flex visit from a label QR
+
+Backup path when the integration didn't pick up an order: scan the QR on
+the Flex label and POST it. We extract the shipment id, resolve the order
+against ML, geocode, and create the visit — idempotent, so scanning the
+same label twice never duplicates.
+
+**From a phone:** open `/scan` in the browser — a camera page that decodes
+the label QR and imports it hands-free (enter the internal secret once; it's
+remembered on the device). Requires HTTPS (Railway serves HTTPS). Under the
+hood it calls the same endpoint below.
+
+```bash
+curl -X POST http://localhost:8000/internal/scan \
+  -H "X-Internal-Secret: $INTERNAL_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"qr": "{\"id\": 40592476937}"}'   # or {"shipping_id": "40592476937"}
+```
+
+```json
+{"shipping_id": "40592476937", "found": true,
+ "ml_order_id": "2000013769523299", "outcome": "completed", "visit_id": "9001"}
 ```
 
 ## Running tests

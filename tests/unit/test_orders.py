@@ -5,11 +5,20 @@ from datetime import datetime, timedelta, timezone
 import httpx
 import pytest
 import respx
+from sqlalchemy import select
 
 from app.core.config import get_settings
-from app.db.models import CronRun, CronRunStatus, OAuthProvider, OAuthToken
+from app.db.models import CronRun, CronRunStatus, ManualReview, OAuthProvider, OAuthToken
 from app.ml.api import MLClient
-from app.ml.orders import DEFAULT_LOOKBACK, PAGE_SIZE, fetch_new_orders, get_cursor
+from app.ml.orders import (
+    DEFAULT_LOOKBACK,
+    PAGE_SIZE,
+    REASON_NO_SHIPMENT,
+    fetch_new_orders,
+    fetch_order_by_id,
+    fetch_order_by_shipment,
+    get_cursor,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -186,3 +195,86 @@ def test_fetch_new_orders_skips_orders_without_shipment(session):
 
     assert summary.skipped_no_shipment == 1
     assert [fo.ml_order_id for fo in summary.fetched] == ["9002"]
+
+
+@respx.mock
+def test_no_shipment_order_is_flagged_for_manual_review(session):
+    """A dropped (no-shipment) order must leave a visible trace, not vanish."""
+    _seed_valid_token(session)
+    orders_page = {
+        "results": [
+            {"id": 9001, "shipping": {}, "pack_id": 7777},  # dropped
+        ],
+        "paging": {"total": 1, "limit": PAGE_SIZE, "offset": 0},
+    }
+    respx.get(_orders_url()).mock(return_value=httpx.Response(200, json=orders_page))
+
+    with MLClient(session) as client:
+        summary = fetch_new_orders(
+            session,
+            since=datetime.now(timezone.utc) - timedelta(hours=1),
+            client=client,
+        )
+
+    assert summary.skipped_no_shipment == 1
+    review = session.execute(
+        select(ManualReview).where(ManualReview.ml_order_id == "9001")
+    ).scalar_one()
+    assert review.reason == REASON_NO_SHIPMENT
+
+
+@respx.mock
+def test_fetch_order_by_id_returns_flex_order(session):
+    _seed_valid_token(session)
+    respx.get(f"{get_settings().ml_api_base}/orders/1001").mock(
+        return_value=httpx.Response(200, json=_mk_order(1001, 5001))
+    )
+    respx.get(_shipment_url(5001)).mock(
+        return_value=httpx.Response(200, json=_mk_shipment(5001, "self_service"))
+    )
+    with MLClient(session) as client:
+        fetched = fetch_order_by_id(client, "1001")
+    assert fetched is not None
+    assert fetched.ml_order_id == "1001"
+
+
+@respx.mock
+def test_fetch_order_by_id_skips_non_flex(session):
+    _seed_valid_token(session)
+    respx.get(f"{get_settings().ml_api_base}/orders/1002").mock(
+        return_value=httpx.Response(200, json=_mk_order(1002, 5002))
+    )
+    respx.get(_shipment_url(5002)).mock(
+        return_value=httpx.Response(200, json=_mk_shipment(5002, "cross_docking"))
+    )
+    with MLClient(session) as client:
+        assert fetch_order_by_id(client, "1002") is None
+
+
+@respx.mock
+def test_fetch_order_by_shipment_resolves_order(session):
+    _seed_valid_token(session)
+    shipment = _mk_shipment(5003, "self_service")
+    shipment["order_id"] = 1003
+    respx.get(_shipment_url(5003)).mock(
+        return_value=httpx.Response(200, json=shipment)
+    )
+    respx.get(f"{get_settings().ml_api_base}/orders/1003").mock(
+        return_value=httpx.Response(200, json=_mk_order(1003, 5003))
+    )
+    with MLClient(session) as client:
+        fetched = fetch_order_by_shipment(client, "5003")
+    assert fetched is not None
+    assert fetched.ml_order_id == "1003"
+
+
+@respx.mock
+def test_fetch_order_by_shipment_skips_non_flex(session):
+    _seed_valid_token(session)
+    shipment = _mk_shipment(5004, "cross_docking")
+    shipment["order_id"] = 1004
+    respx.get(_shipment_url(5004)).mock(
+        return_value=httpx.Response(200, json=shipment)
+    )
+    with MLClient(session) as client:
+        assert fetch_order_by_shipment(client, "5004") is None
